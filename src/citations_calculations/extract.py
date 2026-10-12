@@ -104,7 +104,6 @@ def hides(tag, attrs):
     return (
         tag in ("noscript", "script", "style", "template")
         or "hidden" in a
-        or a.get("aria-hidden", "").strip().lower() == "true"
         or bool(HIDDEN_STYLE.search(a.get("style", "")))
     )
 

@@ -134,13 +134,19 @@ class HiddenTextTests(unittest.TestCase):
             "<p>Revenue was 100 million</p>"
             '<p style="color: red; display:none">Revenue was 999 million</p>'
             "<p hidden>Revenue was 777 million</p>"
-            '<div aria-hidden="true"><p>Revenue was 555 million</p></div>'
             '<div style="visibility: hidden">Revenue was 444 million</div>'
             "<template><p>Revenue was 333 million</p></template>"
             "<script>var revenue = 222;</script>"
             "<p>Margin was 20 percent</p>"
         )
         self.assertEqual(self.texts(page), ["Revenue was 100 million", "Margin was 20 percent"])
+
+    def test_text_hidden_only_from_screen_readers_stays_citable(self):
+        # aria-hidden removes text from the accessibility tree, not from the screen: sighted readers still see it.
+        page = (
+            '<p>Revenue was <span aria-hidden="true">$1.2bn</span></p><div aria-hidden="true"><p>Margin 20%</p></div>'
+        )
+        self.assertEqual(self.texts(page), ["Revenue was $1.2bn", "Margin 20%"])
 
     def test_an_unclosed_hidden_element_does_not_hide_what_follows(self):
         page = (

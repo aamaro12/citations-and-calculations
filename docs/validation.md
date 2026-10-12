@@ -2,11 +2,11 @@
 
 Checks recorded on 12 October 2026.
 
-## Version 0.3.0
+## Version 0.3.1
 
 | Check | Result |
 |---|---|
-| Tests | 79 offline tests pass on Python 3.11 and 3.12 with the PDF extra installed. They cover text and blank PDFs, encrypted PDFs, corrupt Word and Excel files, text that is not UTF-8, hidden web page text, chat delivery and Markdown escaping. Every HTTP call is mocked. |
+| Tests | 80 offline tests pass on Python 3.11 and 3.12 with the PDF extra installed. They cover text and blank PDFs, encrypted PDFs, corrupt Word and Excel files, text that is not UTF-8, hidden web page text (while text hidden only from screen readers stays citable), chat delivery and Markdown escaping. Every HTTP call is mocked. |
 | Safeguards | `check_guards.py` removes 25 selected safeguards, one at a time, in isolated copies, and a test catches each removal. An unmodified copy must pass first. This covers chosen safeguards, not every possible fault. |
 | Demo | 4 synthetic claims combine a CSV file, an HTML page and a captured tool response. Growth recomputes to 25.0% and margin to 20.0%, with no blocked claim. |
 | Report | `check_report.py` confirms that the interactive report's links and anchors resolve, and its search, filters, disclosures and print button pass a mocked DOM test. It was not checked in a browser. |
