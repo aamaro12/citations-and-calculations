@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "citations-and-calculations",
+  "version": "0.3.0",
+  "description": "Give Codex answers exact evidence anchors and recomputed numerical results across uploaded documents, public web pages and captured connected-tool responses.",
+  "author": {"name": "Alessandro Amaro"},
+  "license": "MIT",
+  "keywords": ["citations", "calculations", "codex", "evidence", "research"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Citations & Calculations",
+        "shortDescription": "Evidence and arithmetic checks",
+        "longDescription": "Deliver checked answers directly in Codex chat with clickable source and calculation links. Preserve source snapshots; verify exact passages and structured labels; recompute typed calculations in Python. Optional local reports retain claims and caveats. Uses Codex's existing tools for discovery and connector access. No additional model key or automatic access to other connectors.",
+        "developerName": "Alessandro Amaro",
+        "category": "Productivity",
+        "capabilities": ["Read", "Write", "Interactive"],
+        "defaultPrompt": "Use $cite-and-calculate to answer from my documents and connected sources, with citations and calculations I can inspect."
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "citations-and-calculations",
+  "version": "0.3.0",
+  "description": "Exact evidence anchors and recomputed numerical answers for Codex.",
+  "author": {"name": "Alessandro Amaro"},
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Citations & Calculations",
+    "shortDescription": "Evidence and arithmetic checks",
+    "defaultPrompt": "Use $cite-and-calculate to answer from my documents and connected sources, with citations and calculations I can inspect."
+  }
+}
