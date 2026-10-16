@@ -44,11 +44,11 @@ python3 -m venv .venv
 .venv/bin/citecalc demo --output runs/demo
 ```
 
-If your Python has no trusted certificate store, point `SSL_CERT_FILE` at your system's certificate bundle before fetching web pages. Certificate checks are never turned off.
+If `fetch` fails with `CERTIFICATE_VERIFY_FAILED`, your Python has no certificate store, which is the default for Python from python.org on a Mac. Run `export SSL_CERT_FILE=/etc/ssl/cert.pem` first. Certificate checks are never turned off.
 
 ## Use it with Codex
 
-The repository is a local Codex plugin. `plugin.json` is the manifest, `.codex-plugin/plugin.json` is a compatibility copy, and `skills/cite-and-calculate/SKILL.md` describes the workflow. It follows the [OpenAI plugin format](https://developers.openai.com/plugins/build/plugins). Nothing installs itself or changes your Codex settings.
+The repository is a local Codex plugin. `plugin.json` is the manifest, `.codex-plugin/plugin.json` is a shorter version of it for compatibility, and `skills/cite-and-calculate/SKILL.md` describes the workflow. It follows the [OpenAI plugin format](https://developers.openai.com/plugins/build/plugins). Nothing installs itself or changes your Codex settings.
 
 Point a Codex task at the skill, for example:
 
@@ -64,8 +64,7 @@ Once the plugin is installed, call it with `$cite-and-calculate`. It uses the we
 | `fetch --workspace runs/task --url https://…` | Saves a public web page or document. Only public addresses on ports 80 and 443 are allowed, checked again at every redirect. |
 | `capture --workspace runs/task --file tool-response.json` | Saves a connected tool's response, with its query and whether it was complete. |
 | `read --workspace runs/task --source <source-id> --find revenue` | Lists the matching passages with their exact locations. |
-| `audit --workspace runs/task --bundle answer-input.json --output runs/task/report` | Rechecks every quote and recomputes every figure, then returns the chat answer and the optional reports. |
-| `answer --workspace runs/task --bundle answer-input.json --output runs/task/report` | Runs the same audit and prints the chat answer. |
+| `audit --workspace runs/task --bundle answer-input.json --output runs/task/report` | Rechecks every quote and recomputes every figure, then prints the result as JSON, with the chat answer and the paths of the optional reports. `answer`, with the same options, prints only the chat answer. |
 | `demo --output runs/demo` | Runs the whole workflow offline on the synthetic example. |
 
 Run them with `python3 scripts/citecalc.py`, or as `citecalc` once installed. [The bundle format](skills/cite-and-calculate/references/bundle-format.md) describes the facts, citations, calculations and claims an answer is built from, and the demo writes a working example to `runs/demo/input.json`.
@@ -90,7 +89,7 @@ Run them with `python3 scripts/citecalc.py`, or as `citecalc` once installed. [T
 ## Development
 
 ```sh
-PYTHONPATH=src python -m unittest discover -s tests
+PYTHONPATH=src python3 -m unittest discover -s tests
 python3 scripts/citecalc.py demo --output runs/demo
 python3 scripts/check_report.py runs/demo/report/review.html
 ruff check src tests scripts

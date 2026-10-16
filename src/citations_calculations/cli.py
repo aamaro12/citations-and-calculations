@@ -13,11 +13,12 @@ from . import __version__
 
 def parser():
     p = argparse.ArgumentParser(
-        prog="citecalc", description="Snapshot sources, anchor citations and recompute numerical answers."
+        prog="citecalc",
+        description="Save sources, check the quotes in an answer against them and recompute its figures.",
     )
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="command", required=True)
-    c = sub.add_parser("ingest", help="Snapshot an uploaded document or a saved web response")
+    c = sub.add_parser("ingest", help="Save a copy of a file and index its passages")
     c.add_argument("--workspace", required=True)
     c.add_argument("--file", required=True)
     c.add_argument("--format")
@@ -25,29 +26,27 @@ def parser():
     c.add_argument("--url")
     c.add_argument("--published-at")
     c.add_argument("--completeness", choices=["complete", "partial", "unknown"], default="complete")
-    c = sub.add_parser("fetch", help="Snapshot a public web page or document; redirects and size are bounded")
+    c = sub.add_parser("fetch", help="Save a public web page or document")
     c.add_argument("--workspace", required=True)
     c.add_argument("--url", required=True)
     c.add_argument("--title")
-    c = sub.add_parser("capture", help="Preserve a connected tool response envelope")
+    c = sub.add_parser("capture", help="Save a connected tool's response, with its query and whether it was complete")
     c.add_argument("--workspace", required=True)
     c.add_argument("--file", required=True)
-    c = sub.add_parser("read", help="Read/search a snapshot and list exact citation locators")
+    c = sub.add_parser("read", help="List a saved source's matching passages with their exact locations")
     c.add_argument("--workspace", required=True)
     c.add_argument("--source", required=True)
     c.add_argument("--find", default="")
     c.add_argument("--limit", type=int, default=30)
     for command, help_text in (
-        ("audit", "Recheck evidence and arithmetic; return a chat answer, citation map and review paths"),
-        ("answer", "Re-audit and print the checked answer with clickable links for Codex chat"),
+        ("audit", "Recheck every quote and recompute every figure; print the result as JSON"),
+        ("answer", "Run the same audit and print only the chat answer"),
     ):
         c = sub.add_parser(command, help=help_text)
         c.add_argument("--workspace", required=True)
         c.add_argument("--bundle", required=True)
         c.add_argument("--output", required=True)
-    c = sub.add_parser(
-        "demo", help="A complete offline example with documents, a web capture and a connected-tool capture"
-    )
+    c = sub.add_parser("demo", help="Run the whole workflow offline on the synthetic example")
     c.add_argument("--output", default="runs/demo")
     return p
 
