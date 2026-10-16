@@ -3,12 +3,14 @@
 import io
 import json
 from pathlib import Path
+import ssl
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 import zipfile
 
 from citations_calculations import __version__
+from citations_calculations.acquire import ingest
 from citations_calculations.cli import main
 from citations_calculations.extract import extract
 from citations_calculations.store import EvidenceError
@@ -50,6 +52,45 @@ def encrypted(user_password):
     out = io.BytesIO()
     writer.write(out)
     return out.getvalue()
+
+
+def pages_pdf(streams):
+    """A PDF with one Helvetica page per content stream."""
+    n = len(streams)
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [" + b" ".join(b"%d 0 R" % (4 + 2 * i) for i in range(n)) + b"] /Count %d >>" % n,
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    for i, stream in enumerate(streams):
+        objects.append(
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /Font << /F1 3 0 R >> >> "
+            b"/Contents %d 0 R >>" % (5 + 2 * i)
+        )
+        objects.append(b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream")
+    body = b"%PDF-1.4\n"
+    offsets = []
+    for i, obj in enumerate(objects, 1):
+        offsets.append(len(body))
+        body += str(i).encode() + b" 0 obj\n" + obj + b"\nendobj\n"
+    xref = len(body)
+    body += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    body += b"".join(b"%010d 00000 n \n" % o for o in offsets)
+    return (
+        body
+        + b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n" % (len(objects) + 1)
+        + str(xref).encode()
+        + b"\n%%EOF\n"
+    )
+
+
+def lines(*texts):
+    return b" ".join(b"BT /F1 9 Tf 10 %d Td (%s) Tj ET" % (280 - 12 * i, t) for i, t in enumerate(texts))
+
+
+# Text as two PDFs in the wild extract it: letters mapped to control codes, and glyph names.
+SCRAMBLED = b"\x19&E\x01D@CC@FEJ\x04\x01<O:<GK\x01G<I\x01J?8I<\x01;8K8\x1a"
+GLYPHS = b"/D2/D3 /DB/D0/CT/CS/CV/CT/B5 /BV/D3/D6/D6/CT/CR/D8 /CP/D2/D7/DB /CT/D6/D7"
 
 
 class OfficeFileTests(unittest.TestCase):
@@ -97,6 +138,32 @@ class PdfTests(unittest.TestCase):
     def test_a_password_protected_pdf_is_refused_cleanly(self):
         with self.assertRaisesRegex(EvidenceError, "password"):
             extract(encrypted("secret"), "pdf")
+
+
+class ScrambledPdfTests(unittest.TestCase):
+    def setUp(self):
+        try:
+            import pypdf  # noqa: F401
+        except ImportError:
+            self.skipTest("Optional PDF dependency not installed")
+
+    def ingest(self, data):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "report.pdf"
+            p.write_bytes(data)
+            return ingest(td, p)
+
+    def test_scrambled_and_blank_pages_are_flagged_and_left_out(self):
+        result = self.ingest(pages_pdf([lines(b"Revenue 1250"), lines(*[SCRAMBLED] * 4), lines(*[GLYPHS] * 4), b""]))
+        self.assertEqual(result["source"]["completeness"], "partial")
+        self.assertEqual({u["locator"].split("/")[0] for u in result["units"]}, {"page:1"})
+        self.assertIn("Pages 2-3 have scrambled text; OCR needed", result["warnings"])
+        self.assertIn("Page 4 has no extractable text; OCR needed", result["warnings"])
+
+    def test_a_readable_pdf_stays_complete(self):
+        result = self.ingest(pages_pdf([lines(b"Revenue 1250"), lines(b"Operating profit 250")]))
+        self.assertEqual(result["source"]["completeness"], "complete")
+        self.assertFalse(any("OCR" in w for w in result["warnings"]))
 
 
 class EncodingTests(unittest.TestCase):
@@ -160,6 +227,19 @@ class HiddenTextTests(unittest.TestCase):
 
 
 class FetchTests(unittest.TestCase):
+    def test_a_certificate_failure_explains_how_to_fix_it(self):
+        connection = MagicMock()
+        connection.request.side_effect = ssl.SSLCertVerificationError(
+            1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate"
+        )
+        with (
+            tempfile.TemporaryDirectory() as td,
+            patch("citations_calculations.web.addresses", return_value=["93.184.216.34"]),
+            patch("citations_calculations.web.PinnedConnection", return_value=connection),
+        ):
+            with self.assertRaisesRegex(EvidenceError, "SSL_CERT_FILE=/etc/ssl/cert.pem"):
+                fetch(td, "https://example.com/release")
+
     def test_the_user_agent_names_the_package_version(self):
         response = MagicMock(status=200)
         response.getheader.side_effect = lambda name: {"Content-Type": "text/plain; charset=utf-8"}.get(name)
@@ -174,6 +254,24 @@ class FetchTests(unittest.TestCase):
             fetch(td, "https://example.com/release")
         headers = connection.request.call_args.kwargs["headers"]
         self.assertEqual(headers["User-Agent"].split(" ")[0], "citations-and-calculations/" + __version__)
+
+    def test_a_fetched_pdf_with_scrambled_pages_is_marked_partial(self):
+        try:
+            import pypdf  # noqa: F401
+        except ImportError:
+            self.skipTest("Optional PDF dependency not installed")
+        response = MagicMock(status=200)
+        response.getheader.side_effect = lambda name: {"Content-Type": "application/pdf"}.get(name)
+        response.read.return_value = pages_pdf([lines(b"Revenue 1250"), lines(*[SCRAMBLED] * 4)])
+        connection = MagicMock()
+        connection.getresponse.return_value = response
+        with (
+            tempfile.TemporaryDirectory() as td,
+            patch("citations_calculations.web.addresses", return_value=["93.184.216.34"]),
+            patch("citations_calculations.web.PinnedConnection", return_value=connection),
+        ):
+            result = fetch(td, "https://example.com/report.pdf")
+        self.assertEqual(result["source"]["completeness"], "partial")
 
 
 if __name__ == "__main__":

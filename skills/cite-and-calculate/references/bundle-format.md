@@ -36,7 +36,7 @@ The placeholder ID above is explanatory: replace it with an actual source ID bef
 
 ## Facts
 
-`kind` is `reported` or `assumption`. Reported facts need one or more citations, each with an exact locator and excerpt. The printed numerical value and sign must occur in every excerpt. Explicit CSV/JSON labels for unit, scale, period, company and metric must match. Workbook fiscal-year column headers are checked when unambiguous. Unit interpretations in prose and PDFs are reviewed, not inferred automatically.
+`kind` is `reported` or `assumption`. Reported facts need one or more citations, each with an exact locator and excerpt. The printed numerical value and sign must occur in every excerpt. Explicit CSV/JSON labels for unit, scale, period, company and metric must match. In a workbook, the nearest year heading above the cited cell, such as `FY2026`, `2026` or `2026E` and including one merged across several columns, must appear in the fact's period: `Q2 FY2026` passes under `FY2026`, and `FY2025` does not. A workbook cell can be cited as Excel shows it (`25.0%`, `3,614`) or as stored (`0.25`, `3613.857118`). Unit interpretations in prose and PDFs are reviewed, not inferred automatically.
 
 Assumptions need `reason`; they have no fabricated source citation. All numerical inputs require `label`, `entity`, `period`, `unit` and `value`. Units are `%`, `pp`, `1` or named quantities such as `USD`, `EUR`, `shares`, `customers`, or `USD/shares`. Scale defaults to `1`. `%` and `pp` values are divided by 100 internally. A currency in millions uses `unit: USD`, `scale: 1000000`; cents use `scale: 0.01`. Numerical facts use English digit and thousands formats. JSON numeric scalars are parsed as Decimal without binary-float rounding. Written-out numbers, locale-specific decimal commas and scientific notation in source excerpts are not supported.
 
@@ -62,7 +62,7 @@ For complex Python analysis, use the host's code tools on captured data, then re
 
 ## Claims
 
-`kind` is `fact`, `calculated`, `inference` or `assumption`. Use `{{fact:id}}` and `{{calc:id}}` wherever a figure appears. Bare digits are refused, including dates or version numbers in claim prose; put known periods/entities in the input context or source-backed figure markers. Unknown markers and invalid inputs block the claim.
+`kind` is `fact`, `calculated`, `inference` or `assumption`. Use `{{fact:id}}` and `{{calc:id}}` wherever a figure appears, and `{{period:id}}` or `{{entity:id}}` to show a fact's declared period or company as plain text, for example `Revenue grew {{calc:growth}} in {{period:revenue_current}}.` Bare digits are refused, including dates or version numbers in claim prose, and so are figures written in words, such as twenty twenty-four, one hundred or five percent. Unknown markers and invalid inputs block the claim. `**bold**` is kept, and a claim whose text starts with `- ` is shown as a bullet; other Markdown is shown literally.
 
 Reported claims cannot call assumptions facts. Calculated claims must reference a recomputed calculation. Inferences need a support review and cited premises or typed inputs, but retain their inference label. Assumption claims need a reason. Other claims and reported facts need a review with verdict `supports`, `contradicts` or `unclear`, reviewer `codex` or `human`, and rationale. Only `supports` passes; the package checks the review is present, not whether the reviewer is right.
 

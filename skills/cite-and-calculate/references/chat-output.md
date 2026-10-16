@@ -13,9 +13,20 @@
 
 `answer` accepts the same workspace, bundle and output arguments. It re-audits and prints `chat.answer_markdown` directly to stdout. Both commands refuse to use cached results as verification. A blocked result stays a draft with failed claims and issues visible, and returns exit code 2.
 
+## Checking the delivered message
+
+`check-answer --workspace <run> --bundle <bundle.json> --file <final.md>` compares a final chat message with the checked answer it came from. It finds the audit the message links to, checks that a fresh audit of the bundle still gives the same result, and re-renders that audit's pages, refusing any that were edited. Then it reports:
+
+- a figure whose link is missing, or whose label differs from the checked figure;
+- a source or audit link that was dropped (source links may be relabelled);
+- a number in the message that is not in the checked answer;
+- a blocked answer that no longer says `Draft: checks failed`.
+
+Links can be absolute, as `answer` prints them, or relative to `--base` (the current folder by default), with or without a `:line` suffix. It prints `{"status": "passed", "problems": []}` or `"changed"` with the problems, and exits with code 2 when the message changed. It does not check prose without figures, so a reworded caveat passes.
+
 ## Link behaviour
 
-Local Codex targets are absolute file paths with a one-based line suffix. Angle brackets preserve spaces in those targets. Source pages lead with the exact quote, followed by a readable location, relevant financial labels and any coverage limitation. Links open the original source, saved copy or audit details. Timestamps, hashes, complete extracted units, raw context and provenance remain in the audit record, rather than crowding the page.
+Local Codex targets are absolute file paths with a one-based line suffix. Angle brackets preserve spaces in those targets. Source links are labelled with their citation number, source title and a readable location, such as `S2 · financials.csv · Table row 3, column 3` or `S1 · 10-K.xlsx · Income Statement, cell B4`. Source pages lead with the exact quote, followed by a readable location, relevant financial labels and any coverage limitation. Links open the original source, saved copy or audit details. Timestamps, hashes, complete extracted units, raw context and provenance remain in the audit record, rather than crowding the page.
 
 Input pages show the value, company, period and source; assumptions show their reason instead. Calculation pages lead with the result, then show the formula, linked inputs and any comparison or assumption needed to interpret it. Precision, raw scale and verifier internals remain behind the audit link. Chained calculation inputs link to their own pages.
 

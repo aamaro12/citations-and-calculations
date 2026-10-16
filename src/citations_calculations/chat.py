@@ -17,7 +17,24 @@ def prose(value):
 
 def literal(value):
     text = re.sub(r"\s+", " ", str(value))
-    return re.sub(r"([\\`*_{}\[\]<>#|~!&$])", r"\\\1", text)
+    text = re.sub(r"([\\`*_{}\[\]<>#|~&$])", r"\\\1", text)
+    # An underscore inside a word cannot start emphasis, so file names such as a_b.csv stay readable.
+    return re.sub(r"(?<=[^\W_])\\_(?=[^\W_])", "_", text)
+
+
+BOLD = "\x02"
+STATUS = {
+    "checks_passed": "Checks passed",
+    "checks_passed_with_caveats": "Checks passed with caveats",
+    "blocked": "Checks failed",
+}
+
+
+def claim_markdown(text):
+    """Escaped claim text that keeps balanced **bold**; a leading bullet marker is dropped."""
+    text = str(text).replace(BOLD, "").strip()
+    text = literal((text[2:] if text.startswith("- ") else text).replace("**", BOLD))
+    return text.replace(BOLD, "**" if text.count(BOLD) % 2 == 0 else r"\*\*")
 
 
 def link(label, target):
@@ -55,6 +72,11 @@ def location(locator):
     return locator
 
 
+def owner(result, at):
+    """A caveat's subject by name: the source title or the fact label, not an internal ID."""
+    return result["sources"].get(at, {}).get("title") or result["facts"].get(at, {}).get("label") or at
+
+
 def source_note(e, raw_target, audit_target):
     source, unit = e["source"], e["unit"]
     lines = [
@@ -78,6 +100,11 @@ def source_note(e, raw_target, audit_target):
     labels.extend(str(v) for v in headers.values() if str(v) not in labels)
     if labels:
         lines += ["", "**Context:** " + prose(" · ".join(labels))]
+    context = unit.get("context", {})
+    if isinstance(context.get("stored"), str):
+        lines += ["", "**Stored value:** " + prose(context["stored"]) + ", shown as " + prose(unit["text"])]
+    elif isinstance(context.get("shown"), str):
+        lines += ["", "**The cell shows:** " + prose(context["shown"]) + ", which hides the sign or digits stored"]
     notes = []
     if source["completeness"] != "complete":
         notes.append(
@@ -239,20 +266,30 @@ def render_chat(out, result):
         save("calc-" + cid + ".md", calculation_note(cid, c, result, fact_map, calc_map, audit_target))
 
     lines = []
+    previous_bullet = False
     if result["status"] == "blocked":
         lines += ["**Draft: checks failed. Blocked claims below are not verified.**", ""]
     for c in result["claims"]:
         if c["status"] == "blocked":
             lines += ["**Blocked claim:** " + prose(c["rendered_text"]), ""]
+            previous_bullet = False
             continue
+        # Balanced **bold** and a leading "- " bullet are the only Markdown a claim keeps.
+        source = c["text"].replace(BOLD, "").strip()
+        bullet = source.startswith("- ")
+        source = (source[2:] if bullet else source).replace("**", BOLD)
         pieces, start = [], 0
-        for match in MARKER.finditer(c["text"]):
-            pieces.append(literal(c["text"][start : match.start()]))
-            item = fact_map[match[2]] if match[1] == "fact" else calc_map[match[2]]
-            pieces.append(link(item["display"], item["target"]))
+        for match in MARKER.finditer(source):
+            pieces.append(literal(source[start : match.start()]))
+            if match[1] in ("period", "entity"):
+                pieces.append(literal(result["facts"][match[2]][match[1]]))
+            else:
+                item = fact_map[match[2]] if match[1] == "fact" else calc_map[match[2]]
+                pieces.append(link(item["display"], item["target"]))
             start = match.end()
-        pieces.append(literal(c["text"][start:]))
-        text = "".join(pieces)
+        pieces.append(literal(source[start:]))
+        text = "".join(pieces).strip()
+        text = text.replace(BOLD, "**" if text.count(BOLD) % 2 == 0 else r"\*\*")
         refs = [citation(e) for e in c.get("evidence", [])]
         for fid in c["fact_dependencies"]:
             refs.extend(citation(e) for e in result["facts"][fid]["evidence"])
@@ -260,8 +297,12 @@ def render_chat(out, result):
         prefix = {"inference": "**Inference:** ", "assumption": "**Assumption:** "}.get(c["kind"], "")
         if any(result["facts"][fid].get("kind") == "assumption" for fid in c["fact_dependencies"]):
             prefix = "**Uses assumptions:** " + prefix
-        text += " " + " ".join(link(e["id"] + " · " + e["locator"], e["target"]) for e in refs) if refs else ""
-        lines += [prefix + text, ""]
+        chips = [link(e["id"] + " · " + e["title"] + " · " + location(e["locator"]), e["target"]) for e in refs]
+        text += " " + " ".join(chips) if refs else ""
+        if bullet and previous_bullet and lines and lines[-1] == "":
+            lines.pop()
+        lines += [("- " if bullet else "") + prefix + text, ""]
+        previous_bullet = bullet
     if result["issues"]:
         lines += ["**Failed checks:**", ""]
         lines += ["- " + prose(i["at"] + ": " + i["message"]) for i in result["issues"]]
@@ -269,15 +310,10 @@ def render_chat(out, result):
     if result["warnings"]:
         lines += ["**Caveats:**", ""]
         for w in result["warnings"]:
-            owner = (
-                result["sources"].get(w["at"], {}).get("title")
-                or result["facts"].get(w["at"], {}).get("label")
-                or w["at"]
-            )
-            lines.append("- " + prose(owner + ": " + w["message"]))
+            lines.append("- " + prose(owner(result, w["at"]) + ": " + w["message"]))
         lines.append("")
     lines += [
-        "Checks: " + prose(result["status"]) + ". " + link("Audit details", audit_target),
+        STATUS[result["status"]] + ". " + link("Audit details", audit_target),
         "",
         ("Citation matches and arithmetic are checked" if result["calculations"] else "Citation matches are checked")
         + "; semantic support remains a recorded judgement.",
@@ -292,7 +328,7 @@ def render_chat(out, result):
         "audit_sha256": audit_sha,
         "audit_target": audit_target,
         "boundary": result["boundary"],
-        "delivery": "Display answer_markdown directly in chat. Preserve its links, figures, labels, failed checks and caveats. Do not invent native citation IDs or claim host-wide verification.",
+        "delivery": "Display answer_markdown directly in chat. Preserve its links, figures, labels, failed checks and caveats. Before sending, save the final message and run check-answer on it. Do not invent native citation IDs or claim host-wide verification.",
     }
     save("answer.json", canonical(payload) + b"\n")
     return payload

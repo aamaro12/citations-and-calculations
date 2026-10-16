@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "citations-and-calculations"
-version = "0.3.1"
+version = "0.4.0"
 description = "Clickable citations and reproducible calculations in Codex answers."
 requires-python = ">=3.11"
 license = "MIT"

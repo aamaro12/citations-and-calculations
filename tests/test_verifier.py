@@ -106,6 +106,26 @@ class AuditTests(unittest.TestCase):
         f["value"] = "-250"
         self.assertNotEqual(verify(self.root, self.plan)["status"], "blocked")
 
+    def test_a_citation_cannot_quote_part_of_a_number_or_drop_its_sign(self):
+        f = self.plan["facts"][1]
+        for c in self.plan["calculations"]:
+            c.pop("reported_result", None)
+        for value in ("25", "250", "125"):
+            with self.subTest(value=value):
+                f["value"] = value
+                f["citations"][0]["excerpt"] = value
+                self.assertEqual(verify(self.root, self.plan)["status"], "blocked")
+        path = self.root / "loss.txt"
+        path.write_text("Net loss (1,250)\n")
+        sid = ingest(self.root, path)["source_id"]
+        f["citations"] = [{"source_id": sid, "locator": "line:1", "excerpt": "1,250"}]
+        f["value"] = "1250"
+        self.assertEqual(verify(self.root, self.plan)["status"], "blocked")
+        f["citations"][0]["excerpt"] = "(1,250)"
+        f["value"] = "-1250"
+        r = verify(self.root, self.plan)
+        self.assertFalse(any(i["at"] == "fact:revenue_current" for i in r["issues"]), r["issues"])
+
     def test_a_real_citation_cannot_support_an_invented_numerical_input(self):
         self.plan["facts"][1]["value"] = "1260"
         for c in self.plan["calculations"]:
@@ -328,6 +348,48 @@ class AuditTests(unittest.TestCase):
                     continue
                 self.assertEqual(r["status"], "blocked")
 
+    def test_period_and_entity_markers_show_each_facts_declared_labels(self):
+        self.plan["claims"][0]["text"] = (
+            "{{entity:revenue_current}} revenue grew {{calc:growth}} from {{period:revenue_prior}} "
+            "to {{period:revenue_current}}."
+        )
+        claim = verify(self.root, self.plan)["claims"][0]
+        self.assertEqual(claim["status"], "checks_passed")
+        self.assertEqual(claim["rendered_text"], "Northstar revenue grew 25.0% from FY2024 to FY2025.")
+        self.assertEqual(claim["fact_dependencies"], ["revenue_current", "revenue_prior"])
+        save_json(self.root / "input.json", self.plan)
+        audit_file(self.root, self.root / "input.json", self.root / "report")
+        self.assertIn("from FY2024 to FY2025", (self.root / "report/review.html").read_text())
+
+    def test_a_period_marker_must_name_a_valid_fact(self):
+        self.plan["claims"][0]["text"] = "Revenue grew {{calc:growth}} in {{period:growth}}."
+        r = verify(self.root, self.plan)
+        self.assertEqual(r["claims"][0]["status"], "blocked")
+
+    def test_spelled_out_numbers_in_claim_text_are_refused(self):
+        refused = (
+            "Revenue grew {{calc:growth}} in fiscal twenty twenty-five.",
+            "Revenue grew {{calc:growth}} in the year ended January thirty-first.",
+            "Growth is current over prior, times one hundred: {{calc:growth}}.",
+            "Growth was {{calc:growth}}, about five percent above plan.",
+            "Growth was {{calc:growth}}, or current revenue over prior revenue − one.",
+        )
+        for text in refused:
+            with self.subTest(text=text):
+                self.plan["claims"][0]["text"] = text
+                r = verify(self.root, self.plan)
+                self.assertEqual(r["claims"][0]["status"], "blocked")
+                self.assertIn("Spelled-out number", r["issues"][0]["message"])
+        allowed = (
+            "One of the segments grew, and revenue grew {{calc:growth}}.",
+            "Revenue grew {{calc:growth}} in the first full year after the launch.",
+            "Hundreds of customers joined, and revenue grew {{calc:growth}}.",
+        )
+        for text in allowed:
+            with self.subTest(text=text):
+                self.plan["claims"][0]["text"] = text
+                self.assertEqual(verify(self.root, self.plan)["claims"][0]["status"], "checks_passed")
+
     def test_failed_audit_cli_returns_nonzero_and_keeps_blocked_claims_visible(self):
         self.plan["claims"][0]["text"] = "Growth was 900%."
         save_json(self.root / "bad.json", self.plan)
@@ -429,6 +491,13 @@ class CalculatorTests(unittest.TestCase):
         self.assertEqual(evaluate("max(a,b)", inputs).value, 20)
         self.assertEqual(evaluate("min(a,b)", inputs).value, 10)
         self.assertEqual(evaluate("sum(a,b)", inputs).value, 30)
+
+    def test_formula_errors_say_what_is_wrong(self):
+        q = {"a": Quantity(Decimal(1), ())}
+        with self.assertRaisesRegex(EvidenceError, "nested too deeply"):
+            evaluate("(" * 300 + "a" + ")" * 300, q)
+        with self.assertRaisesRegex(EvidenceError, "Invalid formula: "):
+            evaluate("a +", q)
 
     def test_negative_parentheses_and_percent_token(self):
         self.assertEqual(

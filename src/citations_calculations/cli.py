@@ -26,6 +26,8 @@ def parser():
     c.add_argument("--url")
     c.add_argument("--published-at")
     c.add_argument("--completeness", choices=["complete", "partial", "unknown"], default="complete")
+    c.add_argument("--sheet", action="append", help="Read only this sheet of an Excel workbook; repeat for more")
+    c.add_argument("--range", help="Read only these cells of each sheet read, such as A1:F80")
     c = sub.add_parser("fetch", help="Save a public web page or document")
     c.add_argument("--workspace", required=True)
     c.add_argument("--url", required=True)
@@ -46,6 +48,11 @@ def parser():
         c.add_argument("--workspace", required=True)
         c.add_argument("--bundle", required=True)
         c.add_argument("--output", required=True)
+    c = sub.add_parser("check-answer", help="Check that a final chat message keeps the checked figures and links")
+    c.add_argument("--workspace", required=True)
+    c.add_argument("--bundle", required=True)
+    c.add_argument("--file", required=True, help="The message as it will be sent")
+    c.add_argument("--base", default=".", help="Folder that relative links in the message start from")
     c = sub.add_parser("demo", help="Run the whole workflow offline on the synthetic example")
     c.add_argument("--output", default="runs/demo")
     return p
@@ -56,7 +63,9 @@ def main(argv=None):
     a = p.parse_args(argv)
     try:
         if a.command == "ingest":
-            result = ingest(a.workspace, a.file, a.title, a.url, a.format, a.completeness, a.published_at)
+            result = ingest(
+                a.workspace, a.file, a.title, a.url, a.format, a.completeness, a.published_at, a.sheet, a.range
+            )
         elif a.command == "fetch":
             from .web import fetch
 
@@ -67,6 +76,10 @@ def main(argv=None):
             result = Store(a.workspace).search(a.source, a.find, a.limit)
         elif a.command in ("audit", "answer"):
             result = audit_file(a.workspace, a.bundle, a.output)
+        elif a.command == "check-answer":
+            from .delivery import check_answer
+
+            result = check_answer(a.workspace, a.bundle, Path(a.file).read_text(encoding="utf-8"), a.base)
         else:
             from .demo import run
 
@@ -75,7 +88,7 @@ def main(argv=None):
             print(result["chat"]["answer_markdown"], end="")
         else:
             print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 2 if result.get("status") == "blocked" else 0
+        return 2 if result.get("status") in ("blocked", "changed") else 0
     except (ValueError, OSError, UnicodeError, RecursionError) as e:
         print(json.dumps({"status": "error", "message": str(e)}), file=sys.stderr)
         return 2

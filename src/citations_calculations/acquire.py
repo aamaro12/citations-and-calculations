@@ -28,7 +28,9 @@ def incomplete(value):
     return False
 
 
-def ingest(root, path, title=None, uri=None, format=None, completeness="complete", published_at=None):
+def ingest(
+    root, path, title=None, uri=None, format=None, completeness="complete", published_at=None, sheets=None, cells=None
+):
     path = Path(path)
     if path.name.startswith(".env"):
         raise EvidenceError("Environment files are not evidence")
@@ -39,7 +41,14 @@ def ingest(root, path, title=None, uri=None, format=None, completeness="complete
     if published_at:
         timestamp(published_at)
     raw = path.read_bytes()
-    extracted = extract(raw, format or path.suffix.lower().lstrip("."))
+    extracted = extract(raw, format or path.suffix.lower().lstrip("."), sheets=sheets, cells=cells)
+    scope = {}
+    if sheets:
+        scope["sheets"] = list(sheets)
+    if cells:
+        scope["range"] = str(cells).strip().upper().replace("$", "")
+    if (extracted.get("unread_pages") or scope) and completeness == "complete":
+        completeness = "partial"
     provenance = {
         "title": title or path.name,
         "origin": "web_capture" if uri else "uploaded_file",
@@ -50,6 +59,8 @@ def ingest(root, path, title=None, uri=None, format=None, completeness="complete
         "completeness": completeness,
         "authenticity": "Local snapshot; origin and publication date supplied by the caller",
     }
+    if scope:
+        provenance["scope"] = scope
     sid = Store(root).add(raw, extracted, provenance)
     return Store(root).search(sid)
 

@@ -6,6 +6,8 @@
 
 A page/line locator refers to the PDF extraction, a CSV/XLSX locator to a particular cell, and a JSON locator to a scalar field using RFC 6901 escaping. Context carries explicit labels, adjacent row values, workbook column headings and formulas. Original files are retained for inspection. Captured tool-query arguments are metadata, not evidence units.
 
+Workbook cells are indexed as Excel displays them, using each cell's number format, and the stored value stays beside it and can be cited as well. A format that would hide a sign or every digit is not used for the indexed text. A cell's column headings are the first row's text and, for a number, the nearest labels above it, with merged headings counting for every column they cover. Workbooks are streamed a cell at a time, so one over the passage limit is refused as soon as it passes the limit, and a sheet or range can be read on its own.
+
 A hash proves that the referenced snapshot is unchanged. It does not prove that a service returned that response, that a source is authoritative or that an extraction interpreted a table correctly.
 
 ## Calculations operate on typed facts
@@ -30,7 +32,7 @@ The portable plugin manifest and compatibility overlay share an identity and ver
 
 ## Chat delivery is compiled after a fresh audit
 
-`audit_file` returns a structured chat payload containing the compiled answer, citation map and fact/calculation targets. The `answer` command prints that text directly; it performs the same fresh verification rather than loading a stored verdict. The skill delivers the compiled answer in chat and keeps Markdown/HTML exports optional. Skill instructions guide the assistant but do not enforce an arbitrary later paraphrase.
+`audit_file` returns a structured chat payload containing the compiled answer, citation map and fact/calculation targets. The `answer` command prints that text directly; it performs the same fresh verification rather than loading a stored verdict. The skill delivers the compiled answer in chat and keeps Markdown/HTML exports optional. Skill instructions guide the assistant but do not enforce an arbitrary later paraphrase. `check-answer` narrows that gap: it compares the message about to be sent with a fresh audit of the same bundle, requires each figure to keep its link and label and each source link to stay, and refuses numbers the audit did not check. Prose without figures is not checked.
 
 Source and calculation links resolve to small local notes under a content-addressed audit directory. The notes retain original snapshots, exact excerpts, context, units, formula dependencies and assumptions. Exported source hashes are rechecked before chat rendering. Changed existing notes are refused, and later audits create separate targets. Absolute local links support Codex's file panels; relocating the folder requires a fresh audit. No native citation IDs, custom hover interface, MCP server or global hook are claimed.
 

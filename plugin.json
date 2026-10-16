@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "citations-and-calculations",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Give Codex answers exact evidence anchors and recomputed numerical results across uploaded documents, public web pages and captured connected-tool responses.",
   "author": {"name": "Alessandro Amaro"},
   "license": "MIT",

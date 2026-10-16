@@ -26,7 +26,12 @@ RULES = [
         '        if digest(raw) != meta["raw_sha256"] or digest(extracted) != meta["extracted_sha256"]:',
         "        if False:",
     ),
-    ("exact excerpt", "store.py", '        if normal(excerpt) not in normal(found[0]["text"]):', "        if False:"),
+    (
+        "exact excerpt",
+        "store.py",
+        "        if not any(normal(excerpt) in normal(text) for text in readings(found[0])):",
+        "        if False:",
+    ),
     (
         "structured labels",
         "audit.py",
@@ -39,7 +44,12 @@ RULES = [
         '        if decimal(fields["scale"]) != decimal(fact.get("scale", "1")):',
         "        if False:",
     ),
-    ("workbook period", "audit.py", '    if periods and fact["period"] not in periods:', "    if False:"),
+    (
+        "workbook period",
+        "audit.py",
+        '        if not re.search(r"(?<!\\d)" + year + r"(?!\\d)", fact["period"]):',
+        "        if False:",
+    ),
     (
         "exact printed number and sign",
         "audit.py",
@@ -72,7 +82,7 @@ RULES = [
     (
         "chat literal escaping",
         "chat.py",
-        '    return re.sub(r"([\\\\`*_{}\\[\\]<>#|~!&$])", r"\\\\\\1", text)',
+        '    text = re.sub(r"([\\\\`*_{}\\[\\]<>#|~&$])", r"\\\\\\1", text)',
         "    return text",
     ),
     ("blocked chat claim label", "chat.py", '        if c["status"] == "blocked":', "        if False:"),
@@ -104,6 +114,52 @@ RULES = [
         '                "title": c["title"],',
     ),
     ("restyle citation ID uniqueness", "scripts/refresh_notes.py", ' or c["id"] in seen:', ":"),
+    ("spelled-out numbers", "audit.py", "            if spelled:", "            if False:"),
+    (
+        "whole cited number",
+        "audit.py",
+        '                    if not any(expected in [n for _, n in tokens(text)] for text in readings(e["unit"])):',
+        "                    if False:",
+    ),
+    (
+        "scrambled PDF pages",
+        "extract.py",
+        "            if not text.strip() or scrambled(text):",
+        "            if not text.strip():",
+    ),
+    (
+        "unread pages make a source partial",
+        "acquire.py",
+        '    if (extracted.get("unread_pages") or scope) and completeness == "complete":',
+        "    if False:",
+    ),
+    (
+        "workbook cell limit",
+        "extract.py",
+        "                if len(units) + len(found) >= MAX_UNITS:",
+        "                if False:",
+    ),
+    (
+        "format that hides a sign",
+        "extract.py",
+        '    if not is_date_format(code) and (not re.search(r"\\d", text) or (value < 0 and not re.search(r"[-−(]", text))):',
+        "    if False:",
+    ),
+    (
+        "unbalanced bold stays literal",
+        "chat.py",
+        '        text = text.replace(BOLD, "**" if text.count(BOLD) % 2 == 0 else r"\\*\\*")',
+        '        text = text.replace(BOLD, "**")',
+    ),
+    ("delivered figure label", "delivery.py", "            if label not in found:", "            if False:"),
+    ("delivered source links", "delivery.py", "        elif path not in targets:", "        elif False:"),
+    (
+        "delivered numbers",
+        "delivery.py",
+        '    problems += ["Unchecked number: " + raw for raw, value in numbers(message) if value not in allowed]',
+        "    problems += []",
+    ),
+    ("delivered audit is fresh", "delivery.py", "    if comparable(fresh) != comparable(stored):", "    if False:"),
 ]
 
 

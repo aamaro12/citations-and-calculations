@@ -46,16 +46,23 @@ def fetch(root, url, title=None):
         ip = addresses(p.hostname, port)[0]
         connection = PinnedConnection(p.hostname, port, ip, p.scheme == "https")
         try:
-            connection.request(
-                "GET",
-                (p.path or "/") + ("?" + p.query if p.query else ""),
-                headers={
-                    "User-Agent": f"citations-and-calculations/{__version__} (public evidence capture)",
-                    "Accept": "text/html,application/pdf,application/json,text/plain,text/csv",
-                    "Accept-Encoding": "identity",
-                },
-            )
-            response = connection.getresponse()
+            try:
+                connection.request(
+                    "GET",
+                    (p.path or "/") + ("?" + p.query if p.query else ""),
+                    headers={
+                        "User-Agent": f"citations-and-calculations/{__version__} (public evidence capture)",
+                        "Accept": "text/html,application/pdf,application/json,text/plain,text/csv",
+                        "Accept-Encoding": "identity",
+                    },
+                )
+                response = connection.getresponse()
+            except ssl.SSLCertVerificationError as e:
+                raise EvidenceError(
+                    f"Could not verify the certificate of {p.hostname} ({getattr(e, 'verify_message', None) or e}). If this Python has "
+                    "no certificate store, as with Python from python.org or uv on a Mac, run "
+                    "export SSL_CERT_FILE=/etc/ssl/cert.pem and try again; certificate checks stay on"
+                ) from e
             if response.status in (301, 302, 303, 307, 308):
                 target = response.getheader("Location")
                 if not target:
@@ -105,7 +112,7 @@ def fetch(root, url, title=None):
                 "content_type": content_type,
                 "acquired_at": now(),
                 "published_at": None,
-                "completeness": "complete",
+                "completeness": "partial" if extraction.get("unread_pages") else "complete",
                 "authenticity": "Direct public HTTP response captured by the script; no authentication, model extraction or publication-date inference",
             }
             sid = Store(root).add(raw, extraction, provenance)

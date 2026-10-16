@@ -60,6 +60,12 @@ def normal(text):
     return re.sub(r"\s+", " ", str(text)).strip()
 
 
+def readings(unit):
+    """A spreadsheet cell can be cited as it is shown or as it is stored."""
+    stored = unit.get("context", {}).get("stored")
+    return [unit["text"]] + ([stored] if isinstance(stored, str) else [])
+
+
 class Store:
     def __init__(self, root):
         self.root = Path(root).resolve()
@@ -106,13 +112,13 @@ class Store:
         found = [u for u in extracted["units"] if u["locator"] == locator]
         if len(found) != 1:
             raise EvidenceError("Citation locator is absent or ambiguous")
-        if normal(excerpt) not in normal(found[0]["text"]):
+        if not any(normal(excerpt) in normal(text) for text in readings(found[0])):
             raise EvidenceError("Citation excerpt does not match its locator")
         return {"source": meta, "unit": found[0], "source_id": citation["source_id"], "excerpt": excerpt}
 
     def search(self, sid, query="", limit=30):
         meta, extraction = self.load(sid)
-        matches = [u for u in extraction["units"] if query.casefold() in u["text"].casefold()]
+        matches = [u for u in extraction["units"] if any(query.casefold() in t.casefold() for t in readings(u))]
         if not 1 <= limit <= 200:
             raise EvidenceError("Read limit is 1 to 200 passages")
         return {

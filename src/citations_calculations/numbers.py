@@ -113,8 +113,10 @@ def evaluate(expression, variables):
         raise EvidenceError("Formula must be a bounded arithmetic expression")
     try:
         tree = ast.parse(expression, mode="eval")
-    except (SyntaxError, RecursionError) as e:
-        raise EvidenceError("Invalid formula") from e
+    except (SyntaxError, RecursionError, MemoryError) as e:
+        if isinstance(e, SyntaxError) and "nested" not in str(e.msg):
+            raise EvidenceError("Invalid formula: " + str(e.msg)) from e
+        raise EvidenceError("Formula is nested too deeply") from e
     if len(list(ast.walk(tree))) > 200:
         raise EvidenceError("Formula is too complex")
     used = set()
@@ -182,6 +184,8 @@ def evaluate(expression, variables):
         ctx.prec = 60
         try:
             q = visit(tree.body)
+        except RecursionError as e:
+            raise EvidenceError("Formula is nested too deeply") from e
         except (InvalidOperation, ZeroDivisionError, OverflowError) as e:
             raise EvidenceError("Calculation is undefined") from e
         if used != set(variables):

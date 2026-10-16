@@ -44,7 +44,7 @@ python3 -m venv .venv
 .venv/bin/citecalc demo --output runs/demo
 ```
 
-If `fetch` fails with `CERTIFICATE_VERIFY_FAILED`, your Python has no certificate store, which is the default for Python from python.org on a Mac. Run `export SSL_CERT_FILE=/etc/ssl/cert.pem` first. Certificate checks are never turned off.
+If `fetch` fails with `CERTIFICATE_VERIFY_FAILED`, your Python has no certificate store, as with Python from python.org or uv on a Mac. Run `export SSL_CERT_FILE=/etc/ssl/cert.pem` first. Certificate checks are never turned off.
 
 ## Use it with Codex
 
@@ -60,11 +60,12 @@ Once the plugin is installed, call it with `$cite-and-calculate`. It uses the we
 
 | Command | What it does |
 |---|---|
-| `ingest --workspace runs/task --file report.pdf` | Saves a copy of a file and indexes its passages. Reads text, Markdown, CSV, JSON, HTML, Word, Excel and text-based PDF files. |
+| `ingest --workspace runs/task --file report.pdf` | Saves a copy of a file and indexes its passages. Reads text, Markdown, CSV, JSON, HTML, Word, Excel and text-based PDF files. For a large workbook, add `--sheet <name>` and, if needed, `--range A1:F80`. |
 | `fetch --workspace runs/task --url https://…` | Saves a public web page or document. Only public addresses on ports 80 and 443 are allowed, checked again at every redirect. |
 | `capture --workspace runs/task --file tool-response.json` | Saves a connected tool's response, with its query and whether it was complete. |
 | `read --workspace runs/task --source <source-id> --find revenue` | Lists the matching passages with their exact locations. |
 | `audit --workspace runs/task --bundle answer-input.json --output runs/task/report` | Rechecks every quote and recomputes every figure, then prints the result as JSON, with the chat answer and the paths of the optional reports. `answer`, with the same options, prints only the chat answer. |
+| `check-answer --workspace runs/task --bundle answer-input.json --file final.md` | Checks the message Codex is about to send against a fresh audit: each figure keeps its link and label, no source link is dropped and no unchecked number is added. |
 | `demo --output runs/demo` | Runs the whole workflow offline on the synthetic example. |
 
 Run them with `python3 scripts/citecalc.py`, or as `citecalc` once installed. [The bundle format](skills/cite-and-calculate/references/bundle-format.md) describes the facts, citations, calculations and claims an answer is built from, and the demo writes a working example to `runs/demo/input.json`.
@@ -72,9 +73,10 @@ Run them with `python3 scripts/citecalc.py`, or as `citecalc` once installed. [T
 ## What gets checked
 
 - Each saved source is unchanged, and each quote appears at its stated location.
-- Each number matches the source, sign included. Where a source labels a value's metric, period, company, unit or scale, the fact must carry the same label.
+- Each number matches the source, sign included, and is the whole number at the cited location: an excerpt cannot cut 1,250 down to 250 or drop the brackets from (1,250). Where a source labels a value's metric, period, company, unit or scale, the fact must carry the same label.
 - Calculations use compatible units and scales. Comparisons across periods or companies need a stated reason, and missing, circular or unused inputs are refused.
-- Every figure in an answer comes from a cited fact or a recomputed calculation. To enforce this, claim text can contain no digits outside its figure markers, and that includes years and labels such as Q3.
+- Every figure in an answer comes from a cited fact or a recomputed calculation. To enforce this, claim text can contain no digits outside its markers, and that includes years and labels such as Q3; figures written in words, such as twenty twenty-four, are refused too. A marker shows a fact's period or company instead.
+- Codex can reword the answer before sending it, but `check-answer` then requires every figure to keep its link and label, every source link to stay and no new number to appear.
 - Each claim needs a recorded review, and a review of `contradicts` or `unclear` blocks it. Inferences and assumptions keep their labels.
 - Nothing is reused from an earlier audit: every audit rechecks the sources and recomputes every figure.
 
@@ -83,7 +85,8 @@ Run them with `python3 scripts/citecalc.py`, or as `citecalc` once installed. [T
 ## Limits
 
 - This is a workflow Codex follows when asked, not a hook on every answer. Text outside the audited answer, and connector calls nobody saved, are not checked. Python analysis is recomputed only when it is written as a formula in the bundle, and no model inside the package judges meaning.
-- PDF passages are located by page and line, without positions on the page, and scanned pages need OCR first. Word files are read without headers, footers or tracked changes. Excel formula results are shown as context but cannot be used as inputs until recomputed. Web page text hidden inline or by attribute is left out, but text hidden by a stylesheet is not detected. Numbers are read in English formats.
+- Each source can be up to 20 MiB, or 50 MiB for an Excel workbook, with at most 50,000 passages: lines, rows, cells or JSON fields. A workbook with more cells is refused straight away, with its sheet names, so that one sheet or a range of it can be read instead; such a source is marked partial.
+- PDF passages are located by page and line, without positions on the page. Scanned pages, and pages whose fonts scramble the extracted text, are left out and listed, need OCR first and make the source partial. Word files are read without headers, footers or tracked changes. Excel cells are indexed as Excel shows them, such as 25.0%, and their stored values can be cited too. Excel formula results are shown as context but cannot be used as inputs until recomputed. Web page text hidden inline or by attribute is left out, but text hidden by a stylesheet is not detected. Numbers are read in English formats.
 - Sources and reports stay on your machine, in the ignored `runs/` folder. The report makes no network calls and loads no third-party code. Hashes show that saved evidence has not changed; they cannot detect someone rewriting both the evidence and its references. Publication dates and tool provenance are recorded as supplied.
 
 ## Development
@@ -98,7 +101,7 @@ python3 scripts/check_package.py
 python3 scripts/check_guards.py
 ```
 
-The tests deliberately alter sources, columns, periods, scales, units, calculations, reviews and answer figures. `check_guards.py` removes selected safeguards in isolated copies and requires a test to catch each removal; it covers chosen safeguards, not every possible fault. CI runs all of this on Python 3.11 and 3.12. [Design decisions](docs/design.md) explains the choices, and [validation](docs/validation.md) records the latest checks.
+The tests deliberately alter sources, columns, periods, scales, units, calculations, reviews and answer figures. `check_guards.py` removes selected safeguards in isolated copies and requires a test to catch each removal; it covers chosen safeguards, not every possible fault. CI runs all of this on Python 3.11, 3.12 and 3.13. [Design decisions](docs/design.md) explains the choices, and [validation](docs/validation.md) records the latest checks.
 
 ## Licence
 

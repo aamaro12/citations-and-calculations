@@ -202,6 +202,46 @@ class ChatTests(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceError, "Chat snapshot content changed"):
             render_chat(self.root / "report", result)
 
+    def test_citation_links_name_the_source_and_a_readable_location(self):
+        text = self.first["chat"]["answer_markdown"]
+        targets = {c["target"]: c for c in self.first["chat"]["citations"]}
+        labels = [label for label, target in LINK.findall(text) if target in targets]
+        self.assertTrue(labels)
+        for label in labels:
+            self.assertNotIn("cell:", label)
+            self.assertNotIn("\\", label)
+        self.assertIn("S2 · financials.csv · Table row 3, column 3", labels)
+
+    def test_underscores_inside_words_are_not_escaped(self):
+        self.plan["claims"][-1]["text"] = "The north_star_release file describes a _launch_."
+        text = self.audit()["chat"]["answer_markdown"]
+        self.assertIn("The north_star_release file describes a \\_launch\\_.", text)
+
+    def test_exclamation_marks_are_not_escaped(self):
+        self.plan["claims"][-1]["text"] = "The release describes a launch!"
+        self.assertIn("a launch!", self.audit()["chat"]["answer_markdown"])
+
+    def test_balanced_bold_survives_and_unbalanced_asterisks_stay_literal(self):
+        self.plan["claims"][0]["text"] = "Revenue grew **{{calc:growth}}** to {{fact:revenue_current}}."
+        self.plan["claims"][1]["text"] = "The operating margin was {{calc:margin}} ** for the year."
+        text = self.audit()["chat"]["answer_markdown"]
+        self.assertIn("Revenue grew **[25.0%](<", text)
+        self.assertIn(">)** to [1,250 million USD]", text)
+        self.assertIn(r"\*\* for the year", text)
+
+    def test_claims_written_as_bullets_form_one_list(self):
+        self.plan["claims"][0]["text"] = "- Revenue grew {{calc:growth}}."
+        self.plan["claims"][1]["text"] = "- The operating margin was {{calc:margin}}."
+        lines = self.audit()["chat"]["answer_markdown"].splitlines()
+        first = next(i for i, line in enumerate(lines) if line.startswith("- Revenue grew"))
+        self.assertTrue(lines[first + 1].startswith("- The operating margin was"))
+
+    def test_a_period_marker_is_plain_text_with_its_facts_citation(self):
+        self.plan["claims"][1]["text"] = "In {{period:profit}} the operating margin was {{calc:margin}}."
+        chat = self.audit()["chat"]
+        line = next(line for line in chat["answer_markdown"].splitlines() if "operating margin" in line)
+        self.assertTrue(line.startswith("In FY2025 the operating margin was [20.0%]"), line)
+
     def test_chat_snapshot_symlink_cannot_escape_output_folder(self):
         report = self.root / "other-report"
         report.mkdir()

@@ -7,10 +7,20 @@ import re
 
 from .acquire import timestamp
 from .numbers import decimal, tokens, quantity, evaluate, display
-from .store import Store, EvidenceError, canonical, digest, identifier, now, save_json
+from .store import Store, EvidenceError, canonical, digest, identifier, now, readings, save_json
 from . import __version__
 
-MARKER = re.compile(r"\{\{(fact|calc):([A-Za-z][A-Za-z0-9_-]{0,79})\}\}")
+MARKER = re.compile(r"\{\{(fact|calc|period|entity):([A-Za-z][A-Za-z0-9_-]{0,79})\}\}")
+PERIOD = re.compile(r"(?:FY|CY)?\s?((?:19|20)\d{2})\s?[AEBFP]?", re.I)
+# Figures written out in words, which would bypass the rule that every figure comes from a marker.
+SMALL = "zero|one|two|three|four|five|six|seven|eight|nine|ten"
+SPELLED = re.compile(
+    r"(?i)\b(?:eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen"
+    r"|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b"
+    rf"|\b(?:a|{SMALL})\s+(?:hundred|thousand|million|billion|trillion)\b"
+    rf"|\b(?:{SMALL})\s+(?:per\s?cent|percent|percentage points?|basis points?)\b"
+    rf"|(?:[−×÷=*/+]|\s-|\b(?:minus|plus|times|divided by|multiplied by))\s*(?:{SMALL}|hundred)\b"
+)
 
 
 def review(item):
@@ -62,11 +72,16 @@ def check_context(fact, evidence):
         if decimal(fields["scale"]) != decimal(fact.get("scale", "1")):
             raise EvidenceError("Fact scale contradicts the structured source label")
         checked.append("scale")
-    headers = list(context.get("column_header", {}).values())
-    periods = [h for h in headers if re.fullmatch(r"(?:FY)?\d{4}", h)]
-    if periods and fact["period"] not in periods:
-        raise EvidenceError("Fact period contradicts the workbook column header")
-    if periods:
+    # The nearest year heading above a workbook cell must appear in the fact's period: FY2026 allows Q2 FY2026.
+    years = [
+        (int(re.sub(r"\D", "", ref) or 0), match[1])
+        for ref, heading in context.get("column_header", {}).items()
+        if (match := PERIOD.fullmatch(str(heading).strip()))
+    ]
+    if years:
+        year = max(years)[1]
+        if not re.search(r"(?<!\d)" + year + r"(?!\d)", fact["period"]):
+            raise EvidenceError("Fact period contradicts the workbook column header " + year)
         checked.append("period")
     return sorted(set(checked))
 
@@ -135,6 +150,11 @@ def verify(root, plan):
                 for e in evidence:
                     if expected not in [n for _, n in tokens(e["excerpt"])]:
                         raise EvidenceError("Fact value or sign is absent from the exact cited excerpt")
+                    # The excerpt must not cut a number short: 25 from 1250, or 1,250 from (1,250).
+                    if not any(expected in [n for _, n in tokens(text)] for text in readings(e["unit"])):
+                        raise EvidenceError(
+                            "Fact value is only part of a number at the cited location, or drops its sign"
+                        )
                     e["context_fields_checked"] = check_context(f, e)
                     if e["unit"].get("context", {}).get("cached_formula"):
                         raise EvidenceError(
@@ -234,6 +254,12 @@ def verify(root, plan):
                 raise EvidenceError("Invalid or unknown figure marker")
             if re.search(r"\d", unbound):
                 raise EvidenceError("Unbound number in claim text; use a fact or calculation marker")
+            spelled = SPELLED.search(unbound)
+            if spelled:
+                raise EvidenceError(
+                    'Spelled-out number in claim text ("' + spelled[0].strip() + '"); '
+                    "use a fact, calculation, period or entity marker"
+                )
             if kind == "calculated" and not any(k == "calc" for k, _ in refs):
                 raise EvidenceError("Calculated claim must reference a recomputed calculation")
             if kind == "fact" and any(k == "calc" for k, _ in refs):
@@ -251,10 +277,11 @@ def verify(root, plan):
             rendered = text
             depends = set()
             for typ, ref in refs:
-                if typ == "fact":
+                if typ in ("fact", "period", "entity"):
                     if ref not in fact_results:
                         raise EvidenceError("Claim references an invalid fact")
-                    number = fact_results[ref]["rendered"]["display"]
+                    f = fact_results[ref]
+                    number = f["rendered"]["display"] if typ == "fact" else f[typ]
                     depends.add(ref)
                 else:
                     if ref not in calc_results:
